@@ -1,0 +1,100 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import sqlite3
+
+app = Flask(__name__)
+app.secret_key = 'mysecretkey'
+
+# Set up SQLite database
+conn = sqlite3.connect('database.db')
+conn.execute('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT, email TEXT)')
+conn.execute('CREATE TABLE profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, bio TEXT)')
+conn.close()
+
+# Registration route
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        # Get form data
+        username = request.form['username']
+        password = request.form['password']
+        email = request.form['email']
+        
+        # Validate form data
+        if not username:
+            flash('Username is required', 'error')
+            return redirect(request.url)
+        if not password:
+            flash('Password is required', 'error')
+            return redirect(request.url)
+        if not email:
+            flash('Email is required', 'error')
+            return redirect(request.url)
+        
+        # Check if username or email already exist
+        conn = sqlite3.connect('database.db')
+        if conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone():
+            flash('Username already taken', 'error')
+            conn.close()
+            return redirect(request.url)
+        if conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+            flash('Email already registered', 'error')
+            conn.close()
+            return redirect(request.url)
+        
+        # Insert new user into database
+        conn.execute('INSERT INTO users (username, password, email) VALUES (?, ?, ?)', (username, password, email))
+        conn.commit()
+        conn.close()
+        
+        # Set session variable and redirect to profile creation page
+        session['username'] = username
+        return redirect(url_for('create_profile'))
+    else:
+        # Render registration form
+        return render_template('register.html')
+
+# Profile creation route
+@app.route('/create_profile', methods=['GET', 'POST'])
+def create_profile():
+    if 'username' not in session:
+        # Redirect to login page if not logged in
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        # Get form data
+        name = request.form['name']
+        bio = request.form['bio']
+        
+        # Validate form data
+        if not name:
+            flash('Name is required', 'error')
+            return redirect(request.url)
+        if not bio:
+            flash('Bio is required', 'error')
+            return redirect(request.url)
+        
+        # Get user ID from database
+        conn = sqlite3.connect('database.db')
+        user_id = conn.execute('SELECT id FROM users WHERE username = ?', (session['username'],)).fetchone()[0]
+        
+        # Insert new profile into database
+        conn.execute('INSERT INTO profiles (user_id, name, bio) VALUES (?, ?, ?)', (user_id, name, bio))
+        conn.commit()
+        conn.close()
+        
+        # Redirect to profile page
+        return redirect(url_for('profile'))
+    else:
+        # Render profile creation form
+        return render_template('create_profile.html')
+
+# Profile page route
+@app.route('/profile')
+def profile():
+    if 'username' not in session:
+        # Redirect to login page if not logged in
+        return redirect(url_for('login'))
+    
+    # Get user ID from database
+    conn = sqlite3.connect('database.db')
+    user_id = conn.execute('SELECT
